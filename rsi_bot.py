@@ -360,7 +360,7 @@ def check_regime(state):
         spy_closes  = spy_bars["close"].values
         spy_ma200   = compute_ma(spy_closes, REGIME_MA_PERIOD)
         spy_last    = spy_closes[-1]
-        spy_bearish = spy_last < spy_ma200
+        spy_bearish = bool(spy_last < spy_ma200)
 
         if spy_bearish and not state["regime_bearish"]:
             msg = (f"STOCK REGIME BEARISH | SPY ${spy_last:.2f} below "
@@ -382,7 +382,7 @@ def check_regime(state):
         btc_closes  = btc_bars["close"].values
         btc_ma200   = compute_ma(btc_closes, REGIME_MA_PERIOD)
         btc_last    = btc_closes[-1]
-        btc_bearish = btc_last < btc_ma200
+        btc_bearish = bool(btc_last < btc_ma200)
 
         if btc_bearish and not state["crypto_regime_bearish"]:
             msg = (f"CRYPTO REGIME BEARISH | BTC ${btc_last:.2f} below "
