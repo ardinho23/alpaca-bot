@@ -38,7 +38,7 @@ PAPER          true / false (default true)
 TELEGRAM       Telegram bot token (optional)
 CHAT           Telegram chat ID (optional)
 DRYRUN         true / false (default false)
-PORTFOLIO      portfolio size in USD (default 100)
+PORTFOLIO      portfolio size in USD (default 500)
 """
 
 import os
@@ -71,7 +71,7 @@ PAPER          = os.environ.get("PAPER",   "true").lower() == "true"
 DRYRUN         = os.environ.get("DRYRUN", "false").lower() == "true"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM")
 TELEGRAM_CHAT  = os.environ.get("CHAT")
-PORTFOLIO_SIZE = float(os.environ.get("PORTFOLIO", "100"))
+PORTFOLIO_SIZE = float(os.environ.get("PORTFOLIO", "500"))
 
 # ─── Clients ────────────────────────────────────────────────
 trading_client = TradingClient(API_KEY, SECRET_KEY, paper=PAPER)
@@ -79,12 +79,40 @@ stock_data     = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 crypto_data    = CryptoHistoricalDataClient()
 
 # ─── Universe & Weights ─────────────────────────────────────
+# 23 assets across 5 categories. base_pct must sum to 1.0.
 ASSETS = [
-    {"symbol": "SPY",     "base_pct": 0.40, "max_pct": 0.45, "type": "stock"},
-    {"symbol": "QQQ",     "base_pct": 0.25, "max_pct": 0.30, "type": "stock"},
-    {"symbol": "GLD",     "base_pct": 0.15, "max_pct": 0.20, "type": "stock"},
-    {"symbol": "NVDA",    "base_pct": 0.10, "max_pct": 0.15, "type": "stock"},
-    {"symbol": "BTC/USD", "base_pct": 0.10, "max_pct": 0.15, "type": "crypto"},
+    # ── Core ETFs (35%) ──────────────────────────────────────
+    {"symbol": "SPY",     "base_pct": 0.15, "max_pct": 0.20, "type": "stock"},  # S&P 500
+    {"symbol": "QQQ",     "base_pct": 0.10, "max_pct": 0.15, "type": "stock"},  # Nasdaq 100
+    {"symbol": "IWM",     "base_pct": 0.05, "max_pct": 0.10, "type": "stock"},  # Russell 2000 small caps
+    {"symbol": "DIA",     "base_pct": 0.05, "max_pct": 0.10, "type": "stock"},  # Dow Jones
+
+    # ── Sector ETFs (20%) ────────────────────────────────────
+    {"symbol": "XLK",     "base_pct": 0.05, "max_pct": 0.10, "type": "stock"},  # Technology
+    {"symbol": "XLE",     "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Energy
+    {"symbol": "XLF",     "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Financials
+    {"symbol": "XLV",     "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Healthcare
+    {"symbol": "XLI",     "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Industrials
+
+    # ── Commodities (15%) ────────────────────────────────────
+    {"symbol": "GLD",     "base_pct": 0.05, "max_pct": 0.10, "type": "stock"},  # Gold
+    {"symbol": "SLV",     "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Silver
+    {"symbol": "USO",     "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Oil
+    {"symbol": "UNG",     "base_pct": 0.02, "max_pct": 0.05, "type": "stock"},  # Natural gas
+    {"symbol": "DBA",     "base_pct": 0.02, "max_pct": 0.05, "type": "stock"},  # Agriculture
+
+    # ── Individual Stocks (21%) ──────────────────────────────
+    {"symbol": "NVDA",    "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Nvidia
+    {"symbol": "AAPL",    "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Apple
+    {"symbol": "MSFT",    "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Microsoft
+    {"symbol": "AMZN",    "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Amazon
+    {"symbol": "TSLA",    "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Tesla
+    {"symbol": "META",    "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Meta
+
+    # ── Crypto (9%) ──────────────────────────────────────────
+    {"symbol": "BTC/USD", "base_pct": 0.05, "max_pct": 0.10, "type": "crypto"}, # Bitcoin
+    {"symbol": "ETH/USD", "base_pct": 0.03, "max_pct": 0.07, "type": "crypto"}, # Ethereum
+    {"symbol": "SOL/USD", "base_pct": 0.01, "max_pct": 0.04, "type": "crypto"}, # Solana
 ]
 
 # ─── Strategy Parameters ────────────────────────────────────
