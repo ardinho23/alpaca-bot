@@ -49,7 +49,7 @@ def get_prices(symbol, asset_type, days=30):
             ).df
         else:
             bars = stock_data.get_stock_bars(
-                StockBarsRequest(symbol_or_symbols=symbol, timeframe=TimeFrame.Hour, start=start, end=end)
+                StockBarsRequest(symbol_or_symbols=symbol, timeframe=TimeFrame.Hour, start=start, end=end, feed="iex")
             ).df
         return bars["close"].values if not bars.empty else None
     except Exception as e:
