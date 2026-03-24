@@ -79,40 +79,19 @@ stock_data     = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 crypto_data    = CryptoHistoricalDataClient()
 
 # ─── Universe & Weights ─────────────────────────────────────
-# 23 assets across 5 categories. base_pct must sum to 1.0.
 ASSETS = [
-    # ── Core ETFs (35%) ──────────────────────────────────────
-    {"symbol": "SPY",     "base_pct": 0.15, "max_pct": 0.20, "type": "stock"},  # S&P 500
-    {"symbol": "QQQ",     "base_pct": 0.10, "max_pct": 0.15, "type": "stock"},  # Nasdaq 100
-    {"symbol": "IWM",     "base_pct": 0.05, "max_pct": 0.10, "type": "stock"},  # Russell 2000 small caps
-    {"symbol": "DIA",     "base_pct": 0.05, "max_pct": 0.10, "type": "stock"},  # Dow Jones
-
-    # ── Sector ETFs (20%) ────────────────────────────────────
-    {"symbol": "XLK",     "base_pct": 0.05, "max_pct": 0.10, "type": "stock"},  # Technology
-    {"symbol": "XLE",     "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Energy
-    {"symbol": "XLF",     "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Financials
-    {"symbol": "XLV",     "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Healthcare
-    {"symbol": "XLI",     "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Industrials
-
-    # ── Commodities (15%) ────────────────────────────────────
-    {"symbol": "GLD",     "base_pct": 0.05, "max_pct": 0.10, "type": "stock"},  # Gold
-    {"symbol": "SLV",     "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Silver
-    {"symbol": "USO",     "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Oil
-    {"symbol": "UNG",     "base_pct": 0.02, "max_pct": 0.05, "type": "stock"},  # Natural gas
-    {"symbol": "DBA",     "base_pct": 0.02, "max_pct": 0.05, "type": "stock"},  # Agriculture
-
-    # ── Individual Stocks (21%) ──────────────────────────────
-    {"symbol": "NVDA",    "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Nvidia
-    {"symbol": "AAPL",    "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Apple
-    {"symbol": "MSFT",    "base_pct": 0.04, "max_pct": 0.08, "type": "stock"},  # Microsoft
-    {"symbol": "AMZN",    "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Amazon
-    {"symbol": "TSLA",    "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Tesla
-    {"symbol": "META",    "base_pct": 0.03, "max_pct": 0.07, "type": "stock"},  # Meta
-
-    # ── Crypto (9%) ──────────────────────────────────────────
-    {"symbol": "BTC/USD", "base_pct": 0.05, "max_pct": 0.10, "type": "crypto"}, # Bitcoin
-    {"symbol": "ETH/USD", "base_pct": 0.03, "max_pct": 0.07, "type": "crypto"}, # Ethereum
-    {"symbol": "SOL/USD", "base_pct": 0.01, "max_pct": 0.04, "type": "crypto"}, # Solana
+    {"symbol": "SPY",     "base_pct": 0.12, "max_pct": 0.18, "type": "stock"},   # S&P 500
+    {"symbol": "QQQ",     "base_pct": 0.12, "max_pct": 0.18, "type": "stock"},   # Nasdaq 100
+    {"symbol": "GLD",     "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},   # Gold
+    {"symbol": "SLV",     "base_pct": 0.06, "max_pct": 0.12, "type": "stock"},   # Silver
+    {"symbol": "COPX",    "base_pct": 0.06, "max_pct": 0.12, "type": "stock"},   # Copper miners
+    {"symbol": "XLE",     "base_pct": 0.06, "max_pct": 0.12, "type": "stock"},   # Energy
+    {"symbol": "IWM",     "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},   # Russell 2000
+    {"symbol": "NVDA",    "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},   # Nvidia
+    {"symbol": "MSFT",    "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},   # Microsoft
+    {"symbol": "BTC/USD", "base_pct": 0.10, "max_pct": 0.16, "type": "crypto"},  # Bitcoin
+    {"symbol": "ETH/USD", "base_pct": 0.08, "max_pct": 0.14, "type": "crypto"},  # Ethereum
+    {"symbol": "TLT",     "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},   # Long-term bonds
 ]
 
 # ─── Strategy Parameters ────────────────────────────────────
