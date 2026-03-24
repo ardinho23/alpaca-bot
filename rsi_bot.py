@@ -1,6 +1,6 @@
 """
 =============================================================
-  Alpaca RSI Bot v6 — Full Strategy
+  Alpaca RSI Bot v7 — Full Strategy
 =============================================================
 
 ARCHITECTURE
@@ -76,59 +76,115 @@ stock_data     = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 crypto_data    = CryptoHistoricalDataClient()
 
 # ─── Universe & Weights ─────────────────────────────────────
-# base_pct = target weight in bull regime
-# bear regime halves all base_pct automatically
+# bucket: slow | medium | fast
+# base_pct = target weight in bull regime (halved in bear)
 # max_pct  = absolute ceiling regardless of regime
 ASSETS = [
-    {"symbol": "SPY",     "base_pct": 0.12, "max_pct": 0.18, "type": "stock"},
-    {"symbol": "QQQ",     "base_pct": 0.12, "max_pct": 0.18, "type": "stock"},
-    {"symbol": "GLD",     "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},
-    {"symbol": "SLV",     "base_pct": 0.06, "max_pct": 0.12, "type": "stock"},
-    {"symbol": "COPX",    "base_pct": 0.06, "max_pct": 0.12, "type": "stock"},
-    {"symbol": "XLE",     "base_pct": 0.06, "max_pct": 0.12, "type": "stock"},
-    {"symbol": "IWM",     "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},
-    {"symbol": "NVDA",    "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},
-    {"symbol": "MSFT",    "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},
-    {"symbol": "BTC/USD", "base_pct": 0.10, "max_pct": 0.16, "type": "crypto"},
-    {"symbol": "ETH/USD", "base_pct": 0.08, "max_pct": 0.14, "type": "crypto"},
-    {"symbol": "TLT",     "base_pct": 0.08, "max_pct": 0.14, "type": "stock"},
+    {"symbol": "SPY",     "base_pct": 0.12, "max_pct": 0.18, "type": "stock",  "bucket": "slow"},
+    {"symbol": "QQQ",     "base_pct": 0.12, "max_pct": 0.18, "type": "stock",  "bucket": "medium"},
+    {"symbol": "GLD",     "base_pct": 0.08, "max_pct": 0.13, "type": "stock",  "bucket": "slow"},
+    {"symbol": "SLV",     "base_pct": 0.06, "max_pct": 0.10, "type": "stock",  "bucket": "fast"},
+    {"symbol": "COPX",    "base_pct": 0.06, "max_pct": 0.11, "type": "stock",  "bucket": "medium"},
+    {"symbol": "XLE",     "base_pct": 0.06, "max_pct": 0.11, "type": "stock",  "bucket": "medium"},
+    {"symbol": "IWM",     "base_pct": 0.08, "max_pct": 0.13, "type": "stock",  "bucket": "medium"},
+    {"symbol": "NVDA",    "base_pct": 0.08, "max_pct": 0.12, "type": "stock",  "bucket": "fast"},
+    {"symbol": "MSFT",    "base_pct": 0.08, "max_pct": 0.13, "type": "stock",  "bucket": "slow"},
+    {"symbol": "BTC/USD", "base_pct": 0.10, "max_pct": 0.14, "type": "crypto", "bucket": "fast"},
+    {"symbol": "ETH/USD", "base_pct": 0.08, "max_pct": 0.12, "type": "crypto", "bucket": "fast"},
+    {"symbol": "TLT",     "base_pct": 0.08, "max_pct": 0.13, "type": "stock",  "bucket": "slow"},
 ]
 
-# ─── Strategy Parameters ────────────────────────────────────
+# ─── Bucket Parameters ───────────────────────────────────────
+# Each bucket defines its own thresholds, cooldowns, ATR penalties and stop multiplier.
+#
+# slow   — SPY, GLD, TLT, MSFT
+#   Tighter RSI thresholds (need more conviction to buy/sell)
+#   Longer cooldowns (less frequent trading)
+#   Wider ATR stop (more room to breathe)
+#
+# medium — QQQ, IWM, XLE, COPX
+#   Balanced defaults
+#
+# fast   — NVDA, BTC, ETH, SLV
+#   Wider RSI bands (volatile assets swing more)
+#   Smaller max caps (limit overexposure)
+#   Bigger ATR penalties on high volatility
+#   Tighter stops (cut losses faster)
+#   Stricter cooldowns for SLV/COPX equivalents
+
+BUCKET_PARAMS = {
+    "slow": {
+        "rsi_buy_strong":   22,   # need deeper oversold to buy
+        "rsi_buy_mid":      27,
+        "rsi_buy_weak":     32,
+        "rsi_sell_mild":    68,   # need more overbought to sell
+        "rsi_sell_strong":  75,
+        "rsi_sell_bearish": 62,
+        "cooldown_buy_h":   8,    # longer cooldown
+        "cooldown_sell_h":  2,
+        "atr_stop_mult":    3.0,  # wider stop — room to breathe
+        "atr_high_thresh":  3.0,  # reduce size above this ATR%
+        "atr_low_thresh":   1.0,  # increase size below this ATR%
+    },
+    "medium": {
+        "rsi_buy_strong":   25,
+        "rsi_buy_mid":      30,
+        "rsi_buy_weak":     35,
+        "rsi_sell_mild":    65,
+        "rsi_sell_strong":  72,
+        "rsi_sell_bearish": 60,
+        "cooldown_buy_h":   6,
+        "cooldown_sell_h":  1,
+        "atr_stop_mult":    2.5,
+        "atr_high_thresh":  3.0,
+        "atr_low_thresh":   1.5,
+    },
+    "fast": {
+        "rsi_buy_strong":   28,   # wider band — volatile assets swing harder
+        "rsi_buy_mid":      33,
+        "rsi_buy_weak":     38,
+        "rsi_sell_mild":    62,   # sell earlier on fast assets
+        "rsi_sell_strong":  70,
+        "rsi_sell_bearish": 58,
+        "cooldown_buy_h":   4,    # faster re-entry allowed
+        "cooldown_sell_h":  1,
+        "atr_stop_mult":    2.0,  # tighter stop — cut losses faster
+        "atr_high_thresh":  2.5,  # penalise high ATR more aggressively
+        "atr_low_thresh":   1.5,
+    },
+}
+
+def bp(asset):
+    """Shorthand to get bucket params for an asset."""
+    return BUCKET_PARAMS[asset["bucket"]]
+
+# ─── Global Parameters (not bucket-specific) ─────────────────
 RSI_PERIOD        = 14
 MA_PERIOD         = 100
 ATR_PERIOD        = 14
 REGIME_MA_PERIOD  = 200
-RSI_BUY_STRONG    = 25    # 1.5x unit
-RSI_BUY_MID       = 30    # 1.0x unit
-RSI_BUY_WEAK      = 35    # 0.5x unit
-RSI_SELL_MILD     = 65    # sell 25%
-RSI_SELL_STRONG   = 72    # sell 50%
-RSI_SELL_BEARISH  = 60    # sell 50% when regime bearish
-MIN_CASH_RESERVE  = 0.20  # keep 20% of NAV in cash
-COOLDOWN_BUY_H    = 6
-COOLDOWN_SELL_H   = 1
+MIN_CASH_RESERVE  = 0.20
 MAX_BUYS_PER_ASSET= 3
 MAX_TRADES_DAY    = 10
-DRAWDOWN_BRAKE_1  = 0.05  # halve buy sizes
-DRAWDOWN_BRAKE_2  = 0.08  # stop all buys
+DRAWDOWN_BRAKE_1  = 0.05
+DRAWDOWN_BRAKE_2  = 0.08
 DRAWDOWN_RESUME   = 0.03
 MIN_NOTIONAL      = 1.0
-ATR_STOP_MULT     = 2.5   # stop = entry - 2.5 * ATR at time of buy
-MA_SLOPE_LOOKBACK = 5     # bars to measure MA slope direction
+MA_SLOPE_LOOKBACK = 5
 
 # ─── State File ─────────────────────────────────────────────
 STATE_FILE = "state.json"
 
 def load_state():
     default = {
-        "cooldowns":      {},
-        "daily_trades":   {},
-        "daily_date":     "",
-        "equity_peak":    0.0,
-        "regime_bearish": False,
-        "stop_levels":    {},  # symbol -> stop price
-        "entry_prices":   {},  # symbol -> avg entry price
+        "cooldowns":             {},
+        "daily_trades":          {},
+        "daily_date":            "",
+        "equity_peak":           0.0,
+        "regime_bearish":        False,  # SPY 200d MA (stocks)
+        "crypto_regime_bearish": False,  # BTC 200d MA (crypto)
+        "stop_levels":           {},
+        "entry_prices":          {},
     }
     try:
         with open(STATE_FILE, "r") as f:
@@ -291,43 +347,70 @@ def compute_indicators(symbol, asset_type):
 # ─── check_regime() ──────────────────────────────────────────
 def check_regime(state):
     """
-    Checks SPY vs 200-day MA.
-    Bull regime  → full base_pct allocations
-    Bear regime  → all base_pct halved (exposure scaling, not just buy disabling)
+    Two separate regime filters:
+    - SPY 200d MA  -> governs all stock assets
+    - BTC 200d MA  -> governs all crypto assets
+    Both halve base_pct allocations in bear mode.
     """
-    bars = fetch_data("SPY", "stock", timeframe=TimeFrame.Day, days=220)
-    if bars is None or len(bars) < REGIME_MA_PERIOD:
+    # ── Stock regime (SPY) ──────────────────────────────────
+    spy_bars = fetch_data("SPY", "stock", timeframe=TimeFrame.Day, days=220)
+    if spy_bars is None or len(spy_bars) < REGIME_MA_PERIOD:
         log.warning("Regime: not enough SPY daily data — keeping previous state")
-        return state
+    else:
+        spy_closes  = spy_bars["close"].values
+        spy_ma200   = compute_ma(spy_closes, REGIME_MA_PERIOD)
+        spy_last    = spy_closes[-1]
+        spy_bearish = spy_last < spy_ma200
 
-    closes   = bars["close"].values
-    ma200    = compute_ma(closes, REGIME_MA_PERIOD)
-    spy_last = closes[-1]
-    bearish  = spy_last < ma200
+        if spy_bearish and not state["regime_bearish"]:
+            msg = (f"STOCK REGIME BEARISH | SPY ${spy_last:.2f} below "
+                   f"200d MA ${spy_ma200:.2f} | Stock allocations halved")
+            log.warning(f"⚠️ {msg}")
+            send_telegram(f"⚠️ {msg}")
+        elif not spy_bearish and state["regime_bearish"]:
+            msg = (f"STOCK REGIME BULLISH | SPY ${spy_last:.2f} back above "
+                   f"200d MA ${spy_ma200:.2f} | Full stock allocations restored")
+            log.info(f"✅ {msg}")
+            send_telegram(f"✅ {msg}")
+        state["regime_bearish"] = spy_bearish
 
-    if bearish and not state["regime_bearish"]:
-        msg = (f"⚠️ REGIME BEARISH | SPY ${spy_last:.2f} below 200d MA ${ma200:.2f} | "
-               f"All allocations halved — de-risking mode active")
-        log.warning(msg)
-        send_telegram(msg)
-    elif not bearish and state["regime_bearish"]:
-        msg = (f"✅ REGIME BULLISH | SPY ${spy_last:.2f} back above 200d MA ${ma200:.2f} | "
-               f"Full allocations restored")
-        log.info(msg)
-        send_telegram(msg)
+    # ── Crypto regime (BTC) ─────────────────────────────────
+    btc_bars = fetch_data("BTC/USD", "crypto", timeframe=TimeFrame.Day, days=220)
+    if btc_bars is None or len(btc_bars) < REGIME_MA_PERIOD:
+        log.warning("Regime: not enough BTC daily data — keeping previous crypto state")
+    else:
+        btc_closes  = btc_bars["close"].values
+        btc_ma200   = compute_ma(btc_closes, REGIME_MA_PERIOD)
+        btc_last    = btc_closes[-1]
+        btc_bearish = btc_last < btc_ma200
 
-    state["regime_bearish"] = bearish
+        if btc_bearish and not state["crypto_regime_bearish"]:
+            msg = (f"CRYPTO REGIME BEARISH | BTC ${btc_last:.2f} below "
+                   f"200d MA ${btc_ma200:.2f} | Crypto allocations halved")
+            log.warning(f"⚠️ {msg}")
+            send_telegram(f"⚠️ {msg}")
+        elif not btc_bearish and state["crypto_regime_bearish"]:
+            msg = (f"CRYPTO REGIME BULLISH | BTC ${btc_last:.2f} back above "
+                   f"200d MA ${btc_ma200:.2f} | Full crypto allocations restored")
+            log.info(f"✅ {msg}")
+            send_telegram(f"✅ {msg}")
+        state["crypto_regime_bearish"] = btc_bearish
+
     return state
 
-def effective_base_pct(asset, regime_bearish):
+def effective_base_pct(asset, state):
     """
-    In bear regime, halve the base allocation.
-    This reduces exposure across the board, not just disables buys.
+    Returns effective allocation after regime scaling.
+    Stocks use SPY regime. Crypto uses BTC regime.
+    Bear regime halves the base allocation.
     """
-    pct = asset["base_pct"]
-    if regime_bearish:
-        pct = pct * 0.5
-    return pct
+    pct     = asset["base_pct"]
+    bearish = (
+        state["crypto_regime_bearish"]
+        if asset["type"] == "crypto"
+        else state["regime_bearish"]
+    )
+    return pct * 0.5 if bearish else pct
 
 # ─── check_stops() ───────────────────────────────────────────
 def check_stops(symbol, price, asset_type, state, cash):
@@ -364,22 +447,23 @@ def check_stops(symbol, price, asset_type, state, cash):
     return False, state, cash
 
 # ─── size_position() ─────────────────────────────────────────
-def size_position(rsi, atr_pct, base_alloc, reason_parts):
+def size_position(rsi, atr_pct, base_alloc, asset, reason_parts):
     """
     Buy unit = 10% of base allocation (based on real NAV).
-    Tiered by RSI. Adjusted by ATR volatility.
+    Tiered by RSI. ATR-adjusted. All thresholds from asset bucket.
     """
+    p    = bp(asset)
     unit = base_alloc * 0.10
 
-    if rsi < RSI_BUY_STRONG:
+    if rsi < p["rsi_buy_strong"]:
         multiplier = 1.5
-        reason_parts.append(f"RSI {rsi} < {RSI_BUY_STRONG} → 1.5x unit")
-    elif rsi < RSI_BUY_MID:
+        reason_parts.append(f"RSI {rsi} < {p['rsi_buy_strong']} → 1.5x unit")
+    elif rsi < p["rsi_buy_mid"]:
         multiplier = 1.0
-        reason_parts.append(f"RSI {rsi} < {RSI_BUY_MID} → 1.0x unit")
+        reason_parts.append(f"RSI {rsi} < {p['rsi_buy_mid']} → 1.0x unit")
     else:
         multiplier = 0.5
-        reason_parts.append(f"RSI {rsi} < {RSI_BUY_WEAK} → 0.5x unit")
+        reason_parts.append(f"RSI {rsi} < {p['rsi_buy_weak']} → 0.5x unit")
 
     size = unit * multiplier
 
@@ -387,12 +471,12 @@ def size_position(rsi, atr_pct, base_alloc, reason_parts):
         if atr_pct > 5.0:
             size *= 0.25
             reason_parts.append(f"ATR% {atr_pct}% > 5% → size -75%")
-        elif atr_pct > 3.0:
+        elif atr_pct > p["atr_high_thresh"]:
             size *= 0.50
-            reason_parts.append(f"ATR% {atr_pct}% > 3% → size -50%")
-        elif atr_pct < 1.5:
+            reason_parts.append(f"ATR% {atr_pct}% > {p['atr_high_thresh']}% → size -50%")
+        elif atr_pct < p["atr_low_thresh"]:
             size *= 1.20
-            reason_parts.append(f"ATR% {atr_pct}% < 1.5% → size +20%")
+            reason_parts.append(f"ATR% {atr_pct}% < {p['atr_low_thresh']}% → size +20%")
 
     return round(size, 2)
 
@@ -419,8 +503,8 @@ def risk_checks(symbol, buy_amount, asset, equity, cash, state, reason_parts):
     last_trade   = state["cooldowns"].get(cooldown_key)
     if last_trade:
         elapsed = (datetime.now() - datetime.fromisoformat(last_trade)).total_seconds() / 3600
-        if elapsed < COOLDOWN_BUY_H:
-            remaining = round(COOLDOWN_BUY_H - elapsed, 1)
+        if elapsed < bp(asset)["cooldown_buy_h"]:
+            remaining = round(bp(asset)["cooldown_buy_h"] - elapsed, 1)
             reason_parts.append(f"SKIP: {symbol} cooldown {remaining}h remaining")
             return False, state
 
@@ -495,7 +579,7 @@ def execute_trade(symbol, amount, side, asset_type, reason):
         return None
 
 # ─── update_state() ──────────────────────────────────────────
-def update_state(state, symbol, side, equity, price=None, atr=None):
+def update_state(state, symbol, side, equity, price=None, atr=None, atr_stop_mult=2.5):
     today = datetime.now().strftime("%Y-%m-%d")
     now   = datetime.now().isoformat()
 
@@ -510,11 +594,11 @@ def update_state(state, symbol, side, equity, price=None, atr=None):
         state["daily_trades"][symbol] = state["daily_trades"].get(symbol, 0) + 1
         # Set ATR trailing stop
         if price is not None and atr is not None:
-            stop = round(price - ATR_STOP_MULT * atr, 4)
+            stop = round(price - atr_stop_mult * atr, 4)
             state["stop_levels"][symbol]  = stop
             state["entry_prices"][symbol] = price
             log.info(f"Stop set for {symbol}: ${stop:.4f} "
-                     f"(entry ${price:.4f} - {ATR_STOP_MULT}x ATR ${atr:.4f})")
+                     f"(entry ${price:.4f} - {atr_stop_mult}x ATR ${atr:.4f})")
     else:
         # On sell, remove stop
         state["stop_levels"].pop(symbol, None)
@@ -540,12 +624,15 @@ def run():
     drawdown = (peak - equity) / peak if peak > 0 else 0
 
     log.info(f"{'='*55}")
-    log.info(f"RSI Bot v6 | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    log.info(f"RSI Bot v7 | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     log.info(
         f"Equity: ${equity:.2f} | Cash: ${cash:.2f} | "
         f"Peak: ${peak:.2f} | Drawdown: {drawdown*100:.1f}%"
     )
-    log.info(f"Regime: {'BEARISH 🔴 (allocations halved)' if state['regime_bearish'] else 'BULLISH 🟢 (full allocations)'}")
+    log.info(
+        f"Stock regime: {'BEARISH 🔴' if state['regime_bearish'] else 'BULLISH 🟢'} | "
+        f"Crypto regime: {'BEARISH 🔴' if state.get('crypto_regime_bearish') else 'BULLISH 🟢'}"
+    )
     log.info(f"{'='*55}")
 
     state = check_regime(state)
@@ -553,12 +640,20 @@ def run():
     for asset in ASSETS:
         symbol     = asset["symbol"]
         asset_type = asset["type"]
+        p          = bp(asset)
 
-        # Effective allocation — halved in bear regime
-        eff_pct    = effective_base_pct(asset, state["regime_bearish"])
+        # Effective allocation — uses correct regime per asset type
+        eff_pct    = effective_base_pct(asset, state)
         base_alloc = equity * eff_pct
 
-        log.info(f"\n--- {symbol} ---")
+        # Pick regime flag for this asset
+        is_bearish = (
+            state.get("crypto_regime_bearish", False)
+            if asset_type == "crypto"
+            else state["regime_bearish"]
+        )
+
+        log.info(f"\n--- {symbol} [{asset['bucket']}] ---")
         ind = compute_indicators(symbol, asset_type)
 
         if ind is None:
@@ -575,7 +670,8 @@ def run():
         ma_slope_str = "rising" if ma_up else "falling" if ma_up is not None else "unknown"
         log.info(
             f"{symbol} | Price: ${price} | RSI: {rsi} | "
-            f"100MA: ${ma100} ({ma_slope_str}) | ATR%: {atr_pct}%"
+            f"100MA: ${ma100} ({ma_slope_str}) | ATR%: {atr_pct}% | "
+            f"Alloc: {eff_pct*100:.0f}% (${base_alloc:.2f})"
         )
 
         # ── STOP LOSS CHECK ─────────────────────────────────
@@ -589,15 +685,15 @@ def run():
         sell_pct    = 0
         sell_reason = []
 
-        if state["regime_bearish"] and rsi is not None and rsi > RSI_SELL_BEARISH:
+        if is_bearish and rsi is not None and rsi > p["rsi_sell_bearish"]:
             sell_pct = 0.50
-            sell_reason.append(f"bearish regime + RSI {rsi} > {RSI_SELL_BEARISH}")
-        elif rsi is not None and rsi > RSI_SELL_STRONG:
+            sell_reason.append(f"bearish regime + RSI {rsi} > {p['rsi_sell_bearish']}")
+        elif rsi is not None and rsi > p["rsi_sell_strong"]:
             sell_pct = 0.50
-            sell_reason.append(f"RSI {rsi} > {RSI_SELL_STRONG} (strongly overbought)")
-        elif rsi is not None and rsi > RSI_SELL_MILD:
+            sell_reason.append(f"RSI {rsi} > {p['rsi_sell_strong']} (strongly overbought)")
+        elif rsi is not None and rsi > p["rsi_sell_mild"]:
             sell_pct = 0.25
-            sell_reason.append(f"RSI {rsi} > {RSI_SELL_MILD} (overbought)")
+            sell_reason.append(f"RSI {rsi} > {p['rsi_sell_mild']} (overbought)")
         elif ma100 is not None and price < ma100:
             sell_pct = 0.25
             sell_reason.append(f"price ${price} below 100MA ${ma100}")
@@ -615,10 +711,10 @@ def run():
             last_sell = state["cooldowns"].get(sell_key)
             if last_sell:
                 elapsed = (datetime.now() - datetime.fromisoformat(last_sell)).total_seconds() / 3600
-                if elapsed < COOLDOWN_SELL_H:
+                if elapsed < p["cooldown_sell_h"]:
                     log.info(
                         f"SKIP sell {symbol}: cooldown "
-                        f"{round(COOLDOWN_SELL_H-elapsed,1)}h remaining"
+                        f"{round(p['cooldown_sell_h']-elapsed,1)}h remaining"
                     )
                     continue
 
@@ -629,11 +725,10 @@ def run():
             continue
 
         # ── BUY LOGIC ───────────────────────────────────────
-        if rsi is None or rsi >= RSI_BUY_WEAK:
+        if rsi is None or rsi >= p["rsi_buy_weak"]:
             log.info(f"HOLD {symbol} | RSI {rsi} neutral — no action")
             continue
 
-        # MA slope filter — block buys on falling MA (falling knife)
         if ma_up is False:
             log.info(
                 f"SKIP buy {symbol} | 100MA is falling — "
@@ -648,7 +743,7 @@ def run():
             continue
 
         reason_parts = [f"RSI {rsi} (oversold)"]
-        size = size_position(rsi, atr_pct, base_alloc, reason_parts)
+        size = size_position(rsi, atr_pct, base_alloc, asset, reason_parts)
 
         check, state = risk_checks(
             symbol, size, asset, equity, cash, state, reason_parts
@@ -673,7 +768,8 @@ def run():
             cash  -= size
             state  = update_state(
                 state, symbol, OrderSide.BUY, equity,
-                price=price, atr=atr
+                price=price, atr=atr,
+                atr_stop_mult=bp(asset)["atr_stop_mult"]
             )
 
     log.info(f"\nCycle complete. Next check in 30 minutes.")
