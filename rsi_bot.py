@@ -12,6 +12,10 @@ API_KEY    = os.environ.get("APCA_API_KEY_ID")
 SECRET_KEY = os.environ.get("APCA_API_SECRET_KEY")
 PAPER      = os.environ.get("PAPER", "true").lower() == "true"
 
+print(f"API_KEY loaded: {bool(API_KEY)}")
+print(f"SECRET_KEY loaded: {bool(SECRET_KEY)}")
+print(f"PAPER: {PAPER}")
+
 trading_client = TradingClient(API_KEY, SECRET_KEY, paper=PAPER)
 stock_data     = StockHistoricalDataClient(API_KEY, SECRET_KEY)
 crypto_data    = CryptoHistoricalDataClient()
