@@ -2,6 +2,7 @@ import os
 import time
 import numpy as np
 import pytz
+import requests
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
@@ -10,9 +11,11 @@ from alpaca.data.requests import StockBarsRequest, CryptoBarsRequest
 from alpaca.data.timeframe import TimeFrame
 from datetime import datetime, timedelta
 
-API_KEY    = os.environ.get("API")
-SECRET_KEY = os.environ.get("SECRET")
-PAPER      = os.environ.get("PAPER", "true").lower() == "true"
+API_KEY        = os.environ.get("API")
+SECRET_KEY     = os.environ.get("SECRET")
+PAPER          = os.environ.get("PAPER", "true").lower() == "true"
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM")
+TELEGRAM_CHAT  = os.environ.get("CHAT")
 
 trading_client = TradingClient(API_KEY, SECRET_KEY, paper=PAPER)
 stock_data     = StockHistoricalDataClient(API_KEY, SECRET_KEY)
@@ -29,6 +32,22 @@ ASSETS = [
 RSI_BUY    = 40
 RSI_SELL   = 65
 RSI_PERIOD = 14
+
+def send_telegram(message):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        requests.post(url, data={"chat_id": TELEGRAM_CHAT, "text": message}, timeout=10)
+    except Exception as e:
+        print(f"  Telegram error: {e}")
+
+def get_cash():
+    try:
+        account = trading_client.get_account()
+        return float(account.cash)
+    except:
+        return 0.0
 
 def calculate_rsi(prices, period=14):
     deltas   = np.diff(prices)
@@ -86,9 +105,13 @@ def place_order(symbol, amount, side, asset_type):
     ))
 
 def run():
-    print(f"\n{'='*45}")
-    print(f"RSI Bot -- {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"{'='*45}")
+    now  = datetime.now().strftime("%Y-%m-%d %H:%M")
+    cash = get_cash()
+
+    print(f"\n{'='*50}")
+    print(f"RSI Bot -- {now}")
+    print(f"Cash available: ${cash:.2f}")
+    print(f"{'='*50}")
 
     for asset in ASSETS:
         symbol     = asset["symbol"]
@@ -99,53 +122,74 @@ def run():
         prices = get_prices(symbol, asset_type)
 
         if prices is None or len(prices) < RSI_PERIOD + 1:
-            print(f"  Not enough data -- skipping")
+            print(f"  Skipping {symbol} -- not enough price data")
             continue
 
         rsi            = calculate_rsi(prices, RSI_PERIOD)
         position_value = get_position_value(symbol)
 
-        print(f"  RSI: {rsi:.1f} | Position: ${position_value:.2f}")
+        print(f"  RSI: {rsi:.1f} | Position value: ${position_value:.2f} | Cash: ${cash:.2f}")
 
         if rsi < RSI_BUY:
             multiplier = 1 + (RSI_BUY - rsi) / RSI_BUY
             buy_amount = min(budget * multiplier, budget * 2)
+
+            if cash < buy_amount:
+                msg = f"Wanted to buy {symbol} (RSI {rsi:.1f}) but insufficient cash (${cash:.2f} available, ${buy_amount:.2f} needed)"
+                print(f"  ⚠️  {msg}")
+                send_telegram(f"⚠️ LOW CASH | {msg}")
+                continue
+
             try:
-                result = place_order(symbol, buy_amount, OrderSide.BUY, asset_type)
-                print(f"  BUY  ${buy_amount:.2f} -- RSI oversold at {rsi:.1f} ({result.status})")
+                result    = place_order(symbol, buy_amount, OrderSide.BUY, asset_type)
+                cash     -= buy_amount
+                log       = f"Buying {symbol}: RSI is {rsi:.1f} (oversold) | Amount: ${buy_amount:.2f} | Cash remaining: ${cash:.2f}"
+                print(f"  ✅ {log}")
+                send_telegram(f"🟢 BUY | {log}")
             except Exception as e:
-                print(f"  BUY failed: {e}")
+                err = f"Buy order failed for {symbol}: {e}"
+                print(f"  ❌ {err}")
+                send_telegram(f"🔴 ERROR | {err}")
 
         elif rsi > RSI_SELL and position_value > 0:
             sell_amount = position_value * 0.5
-            if sell_amount >= 1:
-                try:
-                    result = place_order(symbol, sell_amount, OrderSide.SELL, asset_type)
-                    print(f"  SELL ${sell_amount:.2f} -- RSI overbought at {rsi:.1f} ({result.status})")
-                except Exception as e:
-                    print(f"  SELL failed: {e}")
-            else:
-                print(f"  Position too small to sell -- holding")
-        else:
-            print(f"  HOLD -- RSI neutral ({rsi:.1f})")
 
-    print(f"\nDone.")
+            if sell_amount < 1:
+                print(f"  {symbol} overbought (RSI {rsi:.1f}) but position too small to sell (${position_value:.2f})")
+                continue
+
+            try:
+                result    = place_order(symbol, sell_amount, OrderSide.SELL, asset_type)
+                cash     += sell_amount
+                log       = f"Selling {symbol}: RSI is {rsi:.1f} (overbought) | Sold: ${sell_amount:.2f} (half position) | Cash remaining: ${cash:.2f}"
+                print(f"  ✅ {log}")
+                send_telegram(f"🔴 SELL | {log}")
+            except Exception as e:
+                err = f"Sell order failed for {symbol}: {e}"
+                print(f"  ❌ {err}")
+                send_telegram(f"🔴 ERROR | {err}")
+
+        else:
+            print(f"  HOLD {symbol} -- RSI {rsi:.1f} is neutral (no action taken)")
+
+    print(f"\nCycle complete. Next check in 30 minutes.")
+    print(f"{'='*50}")
 
 while True:
-    now = datetime.now(pytz.timezone("US/Eastern"))
-    is_weekday     = now.weekday() < 5
+    now             = datetime.now(pytz.timezone("US/Eastern"))
+    is_weekday      = now.weekday() < 5
     is_market_hours = (now.hour == 9 and now.minute >= 30) or (10 <= now.hour < 16)
 
     if is_weekday and is_market_hours:
         run()
-        print("Sleeping 5 minutes...")
-        time.sleep(300)
+        print("Sleeping 30 minutes...")
+        time.sleep(1800)
     elif is_weekday and now.hour < 9:
-        print(f"Market not open yet -- {now.strftime('%H:%M')} ET")
+        print(f"Market not open yet -- {now.strftime('%H:%M')} ET -- sleeping 10 minutes")
         time.sleep(600)
     elif is_weekday and now.hour >= 16:
-        print(f"Market closed for today -- {now.strftime('%H:%M')} ET")
+        print(f"Market closed for today -- {now.strftime('%H:%M')} ET -- sleeping 1 hour")
         time.sleep(3600)
     else:
-        print("Weekend -- sleeping 1 hour")
+        print(f"Weekend -- {now.strftime('%A %H:%M')} ET -- sleeping 1 hour")
         time.sleep(3600)
