@@ -38,6 +38,7 @@ PAPER          true / false (default true)
 TELEGRAM       Telegram bot token (optional)
 CHAT           Telegram chat ID (optional)
 DRYRUN         true / false (default false)
+PORTFOLIO      portfolio size in USD (default 100)
 """
 
 import os
@@ -70,6 +71,7 @@ PAPER          = os.environ.get("PAPER",   "true").lower() == "true"
 DRYRUN         = os.environ.get("DRYRUN", "false").lower() == "true"
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM")
 TELEGRAM_CHAT  = os.environ.get("CHAT")
+PORTFOLIO_SIZE = float(os.environ.get("PORTFOLIO", "100"))
 
 # ─── Clients ────────────────────────────────────────────────
 trading_client = TradingClient(API_KEY, SECRET_KEY, paper=PAPER)
@@ -333,14 +335,14 @@ def risk_checks(symbol, buy_amount, asset, equity, cash, state, reason_parts):
             return False, state
 
     # Max position cap
-    max_value    = equity * asset["max_pct"]
+    max_value    = PORTFOLIO_SIZE * asset["max_pct"]
     current_pos  = get_position_value(symbol)
     if current_pos + buy_amount > max_value:
         reason_parts.append(f"SKIP: {symbol} would exceed max cap ${max_value:.2f} (current ${current_pos:.2f})")
         return False, state
 
     # Minimum cash reserve
-    min_cash = equity * MIN_CASH_RESERVE
+    min_cash = PORTFOLIO_SIZE * MIN_CASH_RESERVE
     if cash - buy_amount < min_cash:
         reason_parts.append(f"SKIP: buying ${buy_amount:.2f} would breach min cash reserve ${min_cash:.2f}")
         return False, state
@@ -432,7 +434,7 @@ def run():
 
     log.info(f"{'='*55}")
     log.info(f"RSI Bot cycle | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    log.info(f"Equity: ${equity:.2f} | Cash: ${cash:.2f} | Peak: ${peak:.2f} | Drawdown: {drawdown*100:.1f}%")
+    log.info(f"Real equity: ${equity:.2f} | Cash: ${cash:.2f} | Portfolio target: ${PORTFOLIO_SIZE:.2f} | Peak: ${peak:.2f} | Drawdown: {drawdown*100:.1f}%")
     log.info(f"Regime: {'BEARISH 🔴' if state['regime_bearish'] else 'BULLISH 🟢'}")
     log.info(f"{'='*55}")
 
@@ -442,7 +444,7 @@ def run():
     for asset in ASSETS:
         symbol     = asset["symbol"]
         asset_type = asset["type"]
-        base_alloc = equity * asset["base_pct"]
+        base_alloc = PORTFOLIO_SIZE * asset["base_pct"]
 
         log.info(f"\n--- {symbol} ---")
         ind = compute_indicators(symbol, asset_type)
@@ -543,7 +545,7 @@ def run():
 # ─── Entry point ─────────────────────────────────────────────
 ET = pytz.timezone("US/Eastern")
 
-log.info(f"Bot starting | PAPER={PAPER} | DRYRUN={DRYRUN}")
+log.info(f"Bot starting | PAPER={PAPER} | DRYRUN={DRYRUN} | PORTFOLIO=${PORTFOLIO_SIZE:.2f}")
 if DRYRUN:
     log.info("DRY RUN MODE — no real orders will be placed")
 
