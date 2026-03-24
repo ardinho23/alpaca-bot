@@ -1,5 +1,7 @@
 import os
+import time
 import numpy as np
+import pytz
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
@@ -29,11 +31,11 @@ RSI_SELL   = 65
 RSI_PERIOD = 14
 
 def calculate_rsi(prices, period=14):
-    deltas    = np.diff(prices)
-    gains     = np.where(deltas > 0, deltas, 0)
-    losses    = np.where(deltas < 0, -deltas, 0)
-    avg_gain  = np.mean(gains[:period])
-    avg_loss  = np.mean(losses[:period])
+    deltas   = np.diff(prices)
+    gains    = np.where(deltas > 0, deltas, 0)
+    losses   = np.where(deltas < 0, -deltas, 0)
+    avg_gain = np.mean(gains[:period])
+    avg_loss = np.mean(losses[:period])
     if avg_loss == 0:
         return 100
     rs = avg_gain / avg_loss
@@ -45,11 +47,22 @@ def get_prices(symbol, asset_type, days=30):
     try:
         if asset_type == "crypto":
             bars = crypto_data.get_crypto_bars(
-                CryptoBarsRequest(symbol_or_symbols=symbol, timeframe=TimeFrame.Hour, start=start, end=end)
+                CryptoBarsRequest(
+                    symbol_or_symbols=symbol,
+                    timeframe=TimeFrame.Hour,
+                    start=start,
+                    end=end
+                )
             ).df
         else:
             bars = stock_data.get_stock_bars(
-                StockBarsRequest(symbol_or_symbols=symbol, timeframe=TimeFrame.Hour, start=start, end=end, feed="iex")
+                StockBarsRequest(
+                    symbol_or_symbols=symbol,
+                    timeframe=TimeFrame.Hour,
+                    start=start,
+                    end=end,
+                    feed="iex"
+                )
             ).df
         return bars["close"].values if not bars.empty else None
     except Exception as e:
@@ -118,4 +131,21 @@ def run():
 
     print(f"\nDone.")
 
-run()
+while True:
+    now = datetime.now(pytz.timezone("US/Eastern"))
+    is_weekday     = now.weekday() < 5
+    is_market_hours = (now.hour == 9 and now.minute >= 30) or (10 <= now.hour < 16)
+
+    if is_weekday and is_market_hours:
+        run()
+        print("Sleeping 5 minutes...")
+        time.sleep(300)
+    elif is_weekday and now.hour < 9:
+        print(f"Market not open yet -- {now.strftime('%H:%M')} ET")
+        time.sleep(600)
+    elif is_weekday and now.hour >= 16:
+        print(f"Market closed for today -- {now.strftime('%H:%M')} ET")
+        time.sleep(3600)
+    else:
+        print("Weekend -- sleeping 1 hour")
+        time.sleep(3600)
