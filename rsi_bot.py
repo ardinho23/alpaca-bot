@@ -774,7 +774,7 @@ def run():
 
     log.info(f"\nCycle complete. Next check in 30 minutes.")
     log.info(f"{'='*55}")
-  send_telegram(f"✅ RSI Bot cycle complete | {datetime.now().strftime('%Y-%m-%d %H:%M')} | Equity: ${equity:.2f} | Cash: ${cash:.2f}")
+    send_telegram(f"✅ Cycle complete | {datetime.now().strftime('%Y-%m-%d %H:%M')} | Equity: ${equity:.2f} | Cash: ${cash:.2f}")
     save_state(state)
 
 # ─── Entry point ─────────────────────────────────────────────
