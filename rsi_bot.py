@@ -793,8 +793,10 @@ while True:
         log.info("Sleeping 30 minutes...")
         time.sleep(1800)
     elif is_weekday and now.hour < 9:
-        log.info(f"Market not open yet — {now.strftime('%H:%M')} ET — sleeping 10 min")
-        time.sleep(600)
+        log.info(f"Market not open yet — {now.strftime('%H:%M')} ET — crypto-only cycle")
+        run()
+        log.info("Sleeping 1 hour...")
+        time.sleep(3600)
     elif is_weekday and now.hour >= 16:
         log.info(f"Stock market closed — {now.strftime('%H:%M')} ET — crypto-only cycle")
         run()
